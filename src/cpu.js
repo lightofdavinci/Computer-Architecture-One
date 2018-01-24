@@ -8,10 +8,17 @@ const fs = require('fs');
 
 const HLT  = 0b00011011; // Halt CPU
 // !!! IMPLEMENT ME
-const LDI = 0b00000100; // LDI
+const LDI = 0b00000100; // Set the value of a register.
+const ADD = 0b00001100;
+const SUB = 0b00001101; // SUB
 const MUL = 0b00000101; // MUL
-const PRN = 0b00000110; // PRN
-
+const DIV = 0b00001110; // DIV
+const PRN = 0b00000110; // Print
+const PUSH = 0b00001010; // Push Register
+const POP = 0b00001011; // Pop Register
+const CALL = 0b00001111;
+const RET = 0b00010000; // Return from subroutine.
+const JMP = 0b00010001; // Jump to the address stored in the given register.
 /**
  * Class for simulating a simple Computer (CPU & memory)
  */
@@ -25,6 +32,8 @@ class CPU {
 
         this.reg = new Array(8).fill(0); // General-purpose registers
         
+        this.reg[7] = 0xF8;
+
         // Special-purpose registers
         this.reg.PC = 0; // Program Counter
         this.reg.IR = 0; // Instruction Register
@@ -40,9 +49,16 @@ class CPU {
 
         bt[HLT] = this.HLT;
         bt[LDI] = this.LDI;
+        bt[ADD] = this.ADD;
+        bt[SUB] = this.SUB;
         bt[MUL] = this.MUL;
+        bt[DIV] = this.DIV;
         bt[PRN] = this.PRN;
-
+        bt[PUSH] = this.PUSH;
+        bt[POP] = this.POP;
+        bt[RET] = this.RET;
+        bt[JMP] = this.JMP;
+        bt[CALL] = this.CALL;
 		this.branchTable = bt;
 	}
 
@@ -77,12 +93,23 @@ class CPU {
      * op can be: ADD SUB MUL DIV INC DEC CMP
      */
     alu(op, regA, regB) {
-        let valA = this.reg[regA];
-        let valB = this.reg[regB];
         switch (op) {
-            case 'MUL':
-                this.reg[regA] = valA * valB;
+            case 'ADD':
+                this.reg[regA] += this.reg[regB] & 0b11111111;
                 break;
+            case 'SUB':
+                this.reg[regA] -= this.reg[regB] & 0b11111111;
+                break;
+            case 'MUL':
+                this.reg[regA] *= this.reg[regB] & 0b11111111;
+                break;
+            case 'DIV':
+                if (this.reg[regB] === 0) {
+                    console.log("error: can't divide by zero");
+                    this.stopClock();
+                }
+                this.reg[regA] /= this.reg[regB];
+                break
         }
     }
 
@@ -133,6 +160,30 @@ class CPU {
     }
 
     /**
+     * SUB R,R
+     */
+    ADD() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        const regB = this.ram.read(this.reg.PC + 2);
+
+        this.alu('ADD', regA, regB);
+        
+        this.reg.PC += 3;
+    }
+
+     /**
+     * SUB R,R
+     */
+    SUB() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        const regB = this.ram.read(this.reg.PC + 2);
+
+        this.alu('SUB', regA, regB);
+        
+        this.reg.PC += 3;
+    }
+
+    /**
      * MUL R,R
      */
     MUL() {
@@ -142,14 +193,63 @@ class CPU {
         this.alu('MUL', regA, regB);
         
         this.reg.PC += 3;
-    }   
+    }
+    /**
+     * DIV R,R
+     */
+    DIV() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        const regB = this.ram.read(this.reg.PC + 2);
 
+        this.alu('DIV', regA, regB);
+        
+        this.reg.PC += 3;
+    } 
     /**
      * PRN R
      */
     PRN() {
         console.log(this.reg[this.ram.read(this.reg.PC + 1)]);
         this.reg.PC += 2;
+    }
+
+    PUSH() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        this.reg[7]--; // dec r7;
+        this.ram.write(this.reg[7], this.reg[regA]);
+        this.reg.PC += 2;
+    }
+
+    POP() {
+        this.reg[this.ram.read(this.reg.PC + 1)] = this.ram.read(this.reg[7]);
+        this.reg[7]++;
+        this.reg.PC += 2;
+    }
+
+    /**
+     * CALL R
+     */
+    CALL() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        this.reg[7]--;
+        this.ram.write(this.reg[7], this.reg.PC + 2);
+        this.reg.PC = this.reg[regA];
+    }
+
+     /**
+     * RET R
+     */
+    RET() {
+        this.reg.PC = this.ram.read(this.reg[7]);
+        this.reg[7]++;
+    }
+
+     /**
+     * JMP R
+     */
+    JMP() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        this.reg.PC = this.reg[regA];
     }
 }
 
