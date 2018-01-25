@@ -19,6 +19,9 @@ const POP = 0b00001011; // Pop Register
 const CALL = 0b00001111;
 const RET = 0b00010000; // Return from subroutine.
 const JMP = 0b00010001; // Jump to the address stored in the given register.
+const ST = 0b00001001; // Store R R
+const IRET = 0b00011010;
+const PRA = 0b00000111;
 /**
  * Class for simulating a simple Computer (CPU & memory)
  */
@@ -37,6 +40,10 @@ class CPU {
         // Special-purpose registers
         this.reg.PC = 0; // Program Counter
         this.reg.IR = 0; // Instruction Register
+
+        this.flags = {
+            interruptsEnabled: true,
+        };
 
 		this.setupBranchTable();
     }
@@ -59,6 +66,10 @@ class CPU {
         bt[RET] = this.RET;
         bt[JMP] = this.JMP;
         bt[CALL] = this.CALL;
+        bt[ST] = this.ST;
+        bt[IRET] = this.IRET;
+        bt[PRA] = this.PRA;
+
 		this.branchTable = bt;
 	}
 
@@ -78,6 +89,11 @@ class CPU {
         this.clock = setInterval(() => {
             _this.tick();
         }, 1);
+        this.timerHandle = setInterval(() => {
+            // Trigger timer interrupt
+            // set bit 0 to IS to 1
+            this.reg[6] |= 0b00000001;
+        }, 1000);
     }
 
     /**
@@ -85,6 +101,7 @@ class CPU {
      */
     stopClock() {
         clearInterval(this.clock);
+        clearInterval(this.timerHandle);
     }
 
     /**
@@ -117,12 +134,45 @@ class CPU {
      * Advances the CPU one cycle
      */
     tick() {
-        // !!! IMPLEMENT ME
+        const maskedInterrupts = this.reg[6] & this.reg[5];
 
+        // Check if an interrupt happened
+        // if it did, jump to that interrupt handler
+        if (this.flags.interruptsEnabled && maskedInterrupts !== 0) {
+            for (let i = 0; i <= 7; i++) {
+                if (((maskedInterrupts >> i) & 1) === 1) {
+                    // Handling interrupt
+                    this.flags.interruptsEnabled = false;
+
+                    // Clear the bit in the IS
+                    this.reg[6] &= ~(1 << i);
+
+                    // push PC on stack
+                    this.reg[7]--;
+                    this.ram.write(this.reg[7], this.reg.PC);
+
+                    // push remaining registers on stack
+                    for (let j = 0; j <= 7; j++) {
+                        this.reg[7]--;
+                        this.ram.write(this.reg[7], this.reg[j]);
+                    }
+
+                    // look up the handler address in the interrupt vector table
+                    const vectorTableEntry = 0xf8 + i;
+                    const handlerAddress = this.ram.read(vectorTableEntry);
+
+                    // Set PC to handler
+                    this.reg.PC = handlerAddress;
+
+                    console.log('interrupt! ' + i);
+                    break;
+                }
+            }
+        }
         // Load the instruction register from the current PC
         this.reg.IR = this.ram.read(this.reg.PC);
         // Debugging output
-        console.log(`${this.reg.PC}: ${this.reg.IR.toString(2)}`);
+        // console.log(`${this.reg.PC}: ${this.reg.IR.toString(2)}`);
 
         // Based on the value in the Instruction Register, jump to the
         // appropriate hander in the branchTable
@@ -213,6 +263,12 @@ class CPU {
         this.reg.PC += 2;
     }
 
+    PRA() {
+        const regA = this.ram.read(this.reg.PC)
+        console.log(String.fromCharCode(this.reg[regA]));
+        this.reg.PC += 2;
+    }
+
     PUSH() {
         const regA = this.ram.read(this.reg.PC + 1);
         this.reg[7]--; // dec r7;
@@ -226,6 +282,34 @@ class CPU {
         this.reg.PC += 2;
     }
 
+     /**
+     * ST R R
+     */
+    ST() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        const regB = this.ram.read(this.reg.PC + 2);
+
+        this.ram.write(this.reg[regA], this.reg[regB]);
+
+        this.reg.PC += 3;
+    }
+    /**
+     * IRET R R
+     */
+    IRET() {
+        // Pop remaining registers on stack
+        for (let j = 7; j >= 0; j--) {
+            this.reg[j] = this.ram.read(this.reg[7]);
+            this.reg[7]++;
+        }
+
+        // pop PC off stack
+        this.reg.PC = this.ram.read(this.reg[7]);
+        this.reg[7]++;
+
+        // enable interrupts
+        this.flags.interruptsEnabled = true;
+    }
     /**
      * CALL R
      */
