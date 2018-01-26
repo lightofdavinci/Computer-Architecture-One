@@ -1,6 +1,7 @@
 const fs = require('fs');
 const RAM = require('./ram');
 const CPU = require('./cpu');
+const Keyboard = require('./keyboard');
 
 /**
  * Process a loaded file
@@ -81,7 +82,10 @@ function onFileLoaded(cpu) {
  */
 
 let ram = new RAM(256);
+let keyboard = new Keyboard();
 let cpu = new CPU(ram);
+
+keyboard.connectToCPU(cpu);
 
 // Get remaining command line arguments
 const argv = process.argv.slice(2);

@@ -7,7 +7,7 @@ const fs = require('fs');
 // Instructions
 
 const HLT  = 0b00011011; // Halt CPU
-// !!! IMPLEMENT ME
+// instructions
 const LDI = 0b00000100; // Set the value of a register.
 const ADD = 0b00001100;
 const SUB = 0b00001101; // SUB
@@ -20,8 +20,11 @@ const CALL = 0b00001111;
 const RET = 0b00010000; // Return from subroutine.
 const JMP = 0b00010001; // Jump to the address stored in the given register.
 const ST = 0b00001001; // Store R R
+const LD = 0b0010010; 
 const IRET = 0b00011010;
 const PRA = 0b00000111;
+
+const timerInterrupt = 1;
 /**
  * Class for simulating a simple Computer (CPU & memory)
  */
@@ -67,6 +70,7 @@ class CPU {
         bt[JMP] = this.JMP;
         bt[CALL] = this.CALL;
         bt[ST] = this.ST;
+        bt[LD] = this.LD;
         bt[IRET] = this.IRET;
         bt[PRA] = this.PRA;
 
@@ -92,7 +96,8 @@ class CPU {
         this.timerHandle = setInterval(() => {
             // Trigger timer interrupt
             // set bit 0 to IS to 1
-            this.reg[6] |= 0b00000001;
+            // this.reg[6] |= 0b00000001;
+            this.raiseInterrupt(timerInterrupt);
         }, 1000);
     }
 
@@ -103,6 +108,14 @@ class CPU {
         clearInterval(this.clock);
         clearInterval(this.timerHandle);
     }
+
+     /**
+     * Raise an interrupt
+     */
+    raiseInterrupt(n) {
+        this.reg[6] |= n;
+    }
+
 
     /**
      * ALU functionality
@@ -195,7 +208,6 @@ class CPU {
      * HLT
      */
     HLT() {
-        // !!! IMPLEMENT ME
         this.stopClock();
     }
 
@@ -208,7 +220,17 @@ class CPU {
         this.reg[regA] = val;
         this.reg.PC += 3;
     }
+    /**
+     * LD R,I
+     */
+    LD() {
+        const regA = this.ram.read(this.reg.PC + 1);
+        const regB = this.ram.read(this.reg.PC + 2);
 
+        this.reg[regA] = this.ram.read(this.reg[regB]);
+
+        this.reg.PC += 3;
+    }
     /**
      * SUB R,R
      */
@@ -264,8 +286,8 @@ class CPU {
     }
 
     PRA() {
-        const regA = this.ram.read(this.reg.PC)
-        console.log(String.fromCharCode(this.reg[regA]));
+        const regA = this.ram.read(this.reg.PC + 1);
+        process.stdout.write(String.fromCharCode(this.reg[regA]));
         this.reg.PC += 2;
     }
 
